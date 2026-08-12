@@ -2,8 +2,11 @@ package sandbox
 
 import (
   "encoding/json"
+  "errors"
   "os"
   "os/exec"
+  "regexp"
+  "strings"
 )
 
 type Sandbox struct {
@@ -36,10 +39,33 @@ type ExecOptions struct {
   EnvFiles         *[]string
 }
 
-func List() ([]Sandbox, error) {
+type Secret struct {
+  // global
+  Scope string
+  // service
+  Type string
+  // github | anthropic | openai | google
+  Name string
+  // stored | oauth_configured
+  Secret string
+}
+
+type SecretSetOptions struct {
+  Service string
+  Token   string
+  Force   *bool
+  Sandbox *string
+}
+
+type SecretRmOptions struct {
+  Service string
+  Sandbox *string
+}
+
+func Ls() ([]Sandbox, error) {
   cmd := []string{"ls", "--json"}
 
-  result, err := execSbxCmd(cmd)
+  result, err := execSbxCmd(&cmd)
 
   if err != nil {
     return nil, err
@@ -66,7 +92,7 @@ func Create(createOptions *CreateOptions) error {
   cmd = append(cmd, createOptions.Agent)
   cmd = append(cmd, createOptions.Workspaces...)
 
-  _, err := execSbxCmd(cmd)
+  _, err := execSbxCmd(&cmd)
 
   if err != nil {
     return err
@@ -78,7 +104,7 @@ func Create(createOptions *CreateOptions) error {
 func Rm(sandboxes *[]string) error {
   cmd := append([]string{"rm", "--force"}, *sandboxes...)
 
-  _, err := execSbxCmd(cmd)
+  _, err := execSbxCmd(&cmd)
 
   if err != nil {
     return err
@@ -112,11 +138,85 @@ func Exec(execOptions *ExecOptions) ([]byte, error) {
     cmd = append(cmd, *execOptions.Args...)
   }
 
-  return execSbxCmd(cmd)
+  return execSbxCmd(&cmd)
 }
 
-func execSbxCmd(cmd []string) ([]byte, error) {
-  _cmd := exec.Command("sbx", cmd...)
+func SecretLs() ([]Secret, error) {
+  cmd := []string{"secret", "ls"}
+
+  rawResult, err := execSbxCmd(&cmd)
+
+  if err != nil {
+    return nil, err
+  }
+
+  result := strings.Trim(string(rawResult), "\n")
+
+  result = regexp.MustCompile(`\s{2,}|\n`).
+    ReplaceAllString(result, ";")
+
+  result = regexp.MustCompile(`[()]`).
+    ReplaceAllString(result, "")
+
+  result = regexp.MustCompile(`\s`).
+    ReplaceAllString(result, "_")
+
+  fields := strings.Split(result, ";")
+
+  if len(fields)%4 != 0 {
+    return nil, errors.New("'sbx secret ls' output unsupported format")
+  }
+
+  var secrets []Secret
+
+  for i := 4; i < len(fields); i = i + 4 {
+    secrets = append(secrets, Secret{
+      Scope:  fields[i],
+      Type:   fields[i+1],
+      Name:   fields[i+2],
+      Secret: fields[i+3],
+    })
+  }
+
+  return secrets, nil
+}
+
+func SecretSet(secretSetOptions *SecretSetOptions) error {
+  cmd := []string{"secret", "set", secretSetOptions.Service, "--token", secretSetOptions.Token}
+
+  if secretSetOptions.Force != nil && *secretSetOptions.Force == true {
+    cmd = append(cmd, "--force")
+  }
+
+  if secretSetOptions.Sandbox != nil {
+    cmd = append(cmd, "--sandbox", *secretSetOptions.Sandbox)
+  }
+
+  _, err := execSbxCmd(&cmd)
+
+  return err
+}
+
+func SecretRm(secretRmOptions *SecretRmOptions) error {
+  cmd := []string{"secret", "rm", secretRmOptions.Service, "--force"}
+
+  if secretRmOptions.Sandbox != nil {
+    cmd = append(cmd, "--sandbox", *secretRmOptions.Sandbox)
+  }
+
+  _, err := execSbxCmd(&cmd)
+
+  return err
+}
+
+func PolicyAllowNetwork() {}
+func PolicyCheckNetwork() {}
+func PolicyDenyNetwork()  {}
+func PolicyLs()           {}
+func PolicyRmNetwork()    {}
+
+func execSbxCmd(cmd *[]string) ([]byte, error) {
+  _cmd := exec.Command("sbx", *cmd...)
   _cmd.Stderr = os.Stderr
   result, err := _cmd.Output()
 
