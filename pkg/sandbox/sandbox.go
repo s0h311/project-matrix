@@ -9,6 +9,9 @@ import (
   "strings"
 )
 
+// Service github | anthropic | openai | google | ...
+type Service = string
+
 type Sandbox struct {
   Id   string `json:"id"`
   Name string `json:"name"`
@@ -44,21 +47,20 @@ type Secret struct {
   Scope string
   // service
   Type string
-  // github | anthropic | openai | google
-  Name string
+  Name Service
   // stored | oauth_configured
   Secret string
 }
 
 type SecretSetOptions struct {
-  Service string
+  Service Service
   Token   string
   Force   *bool
   Sandbox *string
 }
 
 type SecretRmOptions struct {
-  Service string
+  Service Service
   Sandbox *string
 }
 
