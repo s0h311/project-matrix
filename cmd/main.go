@@ -56,43 +56,55 @@ func main() {
   //// LIST
   //sandboxes, _ = sandbox.Ls()
   //fmt.Printf("%s\n\n", sandboxes)
+  //
+  //// SECRET SET
+  //sandbox1 := "matrix-tabley"
+  //force := true
+  //
+  //err1 := sandbox.SecretSet(&sandbox.SecretSetOptions{
+  //  Service: "openai",
+  //  Token:   "abc",
+  //  Sandbox: &sandbox1,
+  //  Force:   &force,
+  //})
+  //
+  //if err1 != nil {
+  //  panic(err1)
+  //}
+  //
+  //// SECRET LS
+  //secrets, err := sandbox.SecretLs()
+  //
+  //if err != nil {
+  //  panic(err)
+  //}
+  //
+  //fmt.Println(secrets)
+  //
+  //// SECRET RM
+  //err2 := sandbox.SecretRm(&sandbox.SecretRmOptions{
+  //  Service: "openai",
+  //  Sandbox: &sandbox1,
+  //})
+  //
+  //if err2 != nil {
+  //  panic(err2)
+  //}
+  //
+  //// SECRET LS
+  //secrets2, err3 := sandbox.SecretLs()
+  //
+  //if err3 != nil {
+  //  panic(err3)
+  //}
+  //
+  //fmt.Println(secrets2)
 
-  sandbox1 := "matrix-tabley"
-  force := true
+  policies, err4 := sandbox.PolicyLs(&sandbox.PolicyLsOptions{})
 
-  err1 := sandbox.SecretSet(&sandbox.SecretSetOptions{
-    Service: "openai",
-    Token:   "abc",
-    Sandbox: &sandbox1,
-    Force:   &force,
-  })
-
-  if err1 != nil {
-    panic(err1)
+  if err4 != nil {
+    panic(err4)
   }
 
-  secrets, err := sandbox.SecretLs()
-
-  if err != nil {
-    panic(err)
-  }
-
-  fmt.Println(secrets)
-
-  err2 := sandbox.SecretRm(&sandbox.SecretRmOptions{
-    Service: "openai",
-    Sandbox: &sandbox1,
-  })
-
-  if err2 != nil {
-    panic(err2)
-  }
-
-  secrets2, err3 := sandbox.SecretLs()
-
-  if err3 != nil {
-    panic(err3)
-  }
-
-  fmt.Println(secrets2)
+  fmt.Println(policies)
 }

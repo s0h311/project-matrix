@@ -22,7 +22,7 @@ type Sandbox struct {
   Workspaces []string `json:"workspaces"`
 }
 
-type LsResult struct {
+type lsResult struct {
   Sandboxes []Sandbox `json:"sandboxes"`
 }
 
@@ -64,6 +64,33 @@ type SecretRmOptions struct {
   Sandbox *string
 }
 
+type PolicyLsOptions struct {
+  // allow | deny
+  Decision        *string
+  IncludeInactive *bool
+  // all | network | filesystem
+  Type *string
+}
+
+type Policy struct {
+  Id           string   `json:"id"`
+  Name         string   `json:"name"`
+  PolicyId     string   `json:"policy_id"`
+  Scope        string   `json:"scope"`
+  AppliesTo    string   `json:"applies_to"`
+  ResourceType string   `json:"resource_type"`
+  Decision     string   `json:"decision"`
+  Resources    []string `json:"Resources"`
+  Origin       string   `json:"origin"`
+  Layer        string   `json:"layer"`
+  Status       string   `json:"status"`
+  Editable     bool     `json:"editable"`
+}
+
+type policyLsResult struct {
+  Rules []Policy
+}
+
 func Ls() ([]Sandbox, error) {
   cmd := []string{"ls", "--json"}
 
@@ -73,7 +100,7 @@ func Ls() ([]Sandbox, error) {
     return nil, err
   }
 
-  var lsResult LsResult
+  var lsResult lsResult
 
   err = json.Unmarshal(result, &lsResult)
 
@@ -211,10 +238,41 @@ func SecretRm(secretRmOptions *SecretRmOptions) error {
   return err
 }
 
+func PolicyLs(policyLsOptions *PolicyLsOptions) ([]Policy, error) {
+  cmd := []string{"policy", "ls", "--json"}
+
+  if policyLsOptions.Decision != nil {
+    cmd = append(cmd, "--decision", *policyLsOptions.Decision)
+  }
+
+  if policyLsOptions.IncludeInactive != nil && *policyLsOptions.IncludeInactive {
+    cmd = append(cmd, "--include-inactive")
+  }
+
+  if policyLsOptions.Type != nil {
+    cmd = append(cmd, "--type", *policyLsOptions.Type)
+  }
+
+  rawResult, err := execSbxCmd(&cmd)
+
+  if err != nil {
+    return nil, err
+  }
+
+  var result policyLsResult
+
+  err = json.Unmarshal(rawResult, &result)
+
+  if err != nil {
+    return nil, err
+  }
+
+  return result.Rules, nil
+}
+
 func PolicyAllowNetwork() {}
 func PolicyCheckNetwork() {}
 func PolicyDenyNetwork()  {}
-func PolicyLs()           {}
 func PolicyRmNetwork()    {}
 
 func execSbxCmd(cmd *[]string) ([]byte, error) {
