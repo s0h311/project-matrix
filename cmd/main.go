@@ -100,9 +100,20 @@ func main() {
   //
   //fmt.Println(secrets2)
 
-  policies, err4 := sandbox.PolicyLs(&sandbox.PolicyLsOptions{})
-
+  err4 := sandbox.PolicyDenyNetwork(&sandbox.PolicyAllowDenyNetworkOptions{
+    Resources: []string{"*.hellomellow.net"},
+  })
   if err4 != nil {
+    return
+  }
+
+  decision := sandbox.PolicyDecisionDeny
+
+  policies, err5 := sandbox.PolicyLs(&sandbox.PolicyLsOptions{
+    Decision: &decision,
+  })
+
+  if err5 != nil {
     panic(err4)
   }
 

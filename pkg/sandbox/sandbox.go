@@ -1,288 +1,311 @@
 package sandbox
 
 import (
-  "encoding/json"
-  "errors"
-  "os"
-  "os/exec"
-  "regexp"
-  "strings"
+	"encoding/json"
+	"errors"
+	"os"
+	"os/exec"
+	"regexp"
+	"strings"
 )
 
 // Service github | anthropic | openai | google | ...
 type Service = string
 
 type Sandbox struct {
-  Id   string `json:"id"`
-  Name string `json:"name"`
-  // claude | codex | gemini
-  Agent string `json:"agent"`
-  // stopped | running
-  Status     string   `json:"status"`
-  Workspaces []string `json:"workspaces"`
+	Id   string `json:"id"`
+	Name string `json:"name"`
+	// claude | codex | gemini
+	Agent string `json:"agent"`
+	// stopped | running
+	Status     string   `json:"status"`
+	Workspaces []string `json:"workspaces"`
 }
 
 type lsResult struct {
-  Sandboxes []Sandbox `json:"sandboxes"`
+	Sandboxes []Sandbox `json:"sandboxes"`
 }
 
 type CreateOptions struct {
-  Name       string
-  Agent      string
-  Template   *string
-  Workspaces []string
+	Name       string
+	Agent      string
+	Template   *string
+	Workspaces []string
 }
 
 type ExecOptions struct {
-  Sandbox          string
-  Cmd              string
-  Args             *[]string
-  WorkingDirectory *string
-  Env              *[]string
-  EnvFiles         *[]string
+	Sandbox          string
+	Cmd              string
+	Args             *[]string
+	WorkingDirectory *string
+	Env              *[]string
+	EnvFiles         *[]string
 }
 
 type Secret struct {
-  // global
-  Scope string
-  // service
-  Type string
-  Name Service
-  // stored | oauth_configured
-  Secret string
+	// global
+	Scope string
+	// service
+	Type string
+	Name Service
+	// stored | oauth_configured
+	Secret string
 }
 
 type SecretSetOptions struct {
-  Service Service
-  Token   string
-  Force   *bool
-  Sandbox *string
+	Service Service
+	Token   string
+	Force   *bool
+	Sandbox *string
 }
 
 type SecretRmOptions struct {
-  Service Service
-  Sandbox *string
+	Service Service
+	Sandbox *string
 }
 
+const (
+	PolicyDecisionAllow = "allow"
+	PolicyDecisionDeny  = "deny"
+)
+
 type PolicyLsOptions struct {
-  // allow | deny
-  Decision        *string
-  IncludeInactive *bool
-  // all | network | filesystem
-  Type *string
+	// allow | deny
+	Decision        *string
+	IncludeInactive *bool
+	// all | network | filesystem
+	Type *string
 }
 
 type Policy struct {
-  Id           string   `json:"id"`
-  Name         string   `json:"name"`
-  PolicyId     string   `json:"policy_id"`
-  Scope        string   `json:"scope"`
-  AppliesTo    string   `json:"applies_to"`
-  ResourceType string   `json:"resource_type"`
-  Decision     string   `json:"decision"`
-  Resources    []string `json:"Resources"`
-  Origin       string   `json:"origin"`
-  Layer        string   `json:"layer"`
-  Status       string   `json:"status"`
-  Editable     bool     `json:"editable"`
+	Id           string   `json:"id"`
+	Name         string   `json:"name"`
+	PolicyId     string   `json:"policy_id"`
+	Scope        string   `json:"scope"`
+	AppliesTo    string   `json:"applies_to"`
+	ResourceType string   `json:"resource_type"`
+	Decision     string   `json:"decision"`
+	Resources    []string `json:"Resources"`
+	Origin       string   `json:"origin"`
+	Layer        string   `json:"layer"`
+	Status       string   `json:"status"`
+	Editable     bool     `json:"editable"`
 }
 
 type policyLsResult struct {
-  Rules []Policy
+	Rules []Policy
+}
+
+type PolicyAllowDenyNetworkOptions struct {
+	// "**" for all
+	Resources []string
+	Sandbox   *string
 }
 
 func Ls() ([]Sandbox, error) {
-  cmd := []string{"ls", "--json"}
+	cmd := []string{"ls", "--json"}
 
-  result, err := execSbxCmd(&cmd)
+	result, err := execSbxCmd(&cmd)
 
-  if err != nil {
-    return nil, err
-  }
+	if err != nil {
+		return nil, err
+	}
 
-  var lsResult lsResult
+	var lsResult lsResult
 
-  err = json.Unmarshal(result, &lsResult)
+	err = json.Unmarshal(result, &lsResult)
 
-  if err != nil {
-    return nil, err
-  }
+	if err != nil {
+		return nil, err
+	}
 
-  return lsResult.Sandboxes, nil
+	return lsResult.Sandboxes, nil
 }
 
 func Create(createOptions *CreateOptions) error {
-  cmd := []string{"create", "--name", createOptions.Name}
+	cmd := []string{"create", "--name", createOptions.Name}
+	cmd = appendOptionalOption(cmd, "--template", createOptions.Template)
+	cmd = append(cmd, createOptions.Agent)
+	cmd = append(cmd, createOptions.Workspaces...)
 
-  if createOptions.Template != nil {
-    cmd = append(cmd, "--template", *createOptions.Template)
-  }
+	_, err := execSbxCmd(&cmd)
 
-  cmd = append(cmd, createOptions.Agent)
-  cmd = append(cmd, createOptions.Workspaces...)
+	if err != nil {
+		return err
+	}
 
-  _, err := execSbxCmd(&cmd)
-
-  if err != nil {
-    return err
-  }
-
-  return nil
+	return nil
 }
 
 func Rm(sandboxes *[]string) error {
-  cmd := append([]string{"rm", "--force"}, *sandboxes...)
+	// FIXME drifting from original API
+	cmd := append([]string{"rm", "--force"}, *sandboxes...)
 
-  _, err := execSbxCmd(&cmd)
+	_, err := execSbxCmd(&cmd)
 
-  if err != nil {
-    return err
-  }
+	if err != nil {
+		return err
+	}
 
-  return nil
+	return nil
 }
 
 func Exec(execOptions *ExecOptions) ([]byte, error) {
-  cmd := []string{"exec"}
+	cmd := []string{"exec"}
 
-  if execOptions.Env != nil {
-    for _, env := range *execOptions.Env {
-      cmd = append(cmd, "--env", env)
-    }
-  }
+	if execOptions.Env != nil {
+		for _, env := range *execOptions.Env {
+			cmd = append(cmd, "--env", env)
+		}
+	}
 
-  if execOptions.EnvFiles != nil {
-    for _, envFile := range *execOptions.EnvFiles {
-      cmd = append(cmd, "--env-file", envFile)
-    }
-  }
+	if execOptions.EnvFiles != nil {
+		for _, envFile := range *execOptions.EnvFiles {
+			cmd = append(cmd, "--env-file", envFile)
+		}
+	}
 
-  if execOptions.WorkingDirectory != nil {
-    cmd = append(cmd, "--workdir", *execOptions.WorkingDirectory)
-  }
+	cmd = appendOptionalOption(cmd, "--workdir", execOptions.WorkingDirectory)
+	cmd = append(cmd, "--", execOptions.Sandbox, execOptions.Cmd)
 
-  cmd = append(cmd, "--", execOptions.Sandbox, execOptions.Cmd)
+	if execOptions.Args != nil {
+		cmd = append(cmd, *execOptions.Args...)
+	}
 
-  if execOptions.Args != nil {
-    cmd = append(cmd, *execOptions.Args...)
-  }
-
-  return execSbxCmd(&cmd)
+	return execSbxCmd(&cmd)
 }
 
 func SecretLs() ([]Secret, error) {
-  cmd := []string{"secret", "ls"}
+	cmd := []string{"secret", "ls"}
 
-  rawResult, err := execSbxCmd(&cmd)
+	rawResult, err := execSbxCmd(&cmd)
 
-  if err != nil {
-    return nil, err
-  }
+	if err != nil {
+		return nil, err
+	}
 
-  result := strings.Trim(string(rawResult), "\n")
+	result := strings.Trim(string(rawResult), "\n")
 
-  result = regexp.MustCompile(`\s{2,}|\n`).
-    ReplaceAllString(result, ";")
+	result = regexp.MustCompile(`\s{2,}|\n`).
+		ReplaceAllString(result, ";")
 
-  result = regexp.MustCompile(`[()]`).
-    ReplaceAllString(result, "")
+	result = regexp.MustCompile(`[()]`).
+		ReplaceAllString(result, "")
 
-  result = regexp.MustCompile(`\s`).
-    ReplaceAllString(result, "_")
+	result = regexp.MustCompile(`\s`).
+		ReplaceAllString(result, "_")
 
-  fields := strings.Split(result, ";")
+	fields := strings.Split(result, ";")
 
-  if len(fields)%4 != 0 {
-    return nil, errors.New("'sbx secret ls' output unsupported format")
-  }
+	if len(fields)%4 != 0 {
+		return nil, errors.New("'sbx secret ls' output unsupported format")
+	}
 
-  var secrets []Secret
+	var secrets []Secret
 
-  for i := 4; i < len(fields); i = i + 4 {
-    secrets = append(secrets, Secret{
-      Scope:  fields[i],
-      Type:   fields[i+1],
-      Name:   fields[i+2],
-      Secret: fields[i+3],
-    })
-  }
+	for i := 4; i < len(fields); i = i + 4 {
+		secrets = append(secrets, Secret{
+			Scope:  fields[i],
+			Type:   fields[i+1],
+			Name:   fields[i+2],
+			Secret: fields[i+3],
+		})
+	}
 
-  return secrets, nil
+	return secrets, nil
 }
 
 func SecretSet(secretSetOptions *SecretSetOptions) error {
-  cmd := []string{"secret", "set", secretSetOptions.Service, "--token", secretSetOptions.Token}
+	cmd := []string{"secret", "set", secretSetOptions.Service, "--token", secretSetOptions.Token}
+	cmd = appendOptionalBoolFlag(cmd, "--force", secretSetOptions.Force)
+	cmd = appendOptionalOption(cmd, "--sandbox", secretSetOptions.Sandbox)
 
-  if secretSetOptions.Force != nil && *secretSetOptions.Force == true {
-    cmd = append(cmd, "--force")
-  }
+	_, err := execSbxCmd(&cmd)
 
-  if secretSetOptions.Sandbox != nil {
-    cmd = append(cmd, "--sandbox", *secretSetOptions.Sandbox)
-  }
-
-  _, err := execSbxCmd(&cmd)
-
-  return err
+	return err
 }
 
 func SecretRm(secretRmOptions *SecretRmOptions) error {
-  cmd := []string{"secret", "rm", secretRmOptions.Service, "--force"}
+	cmd := []string{"secret", "rm", secretRmOptions.Service, "--force"}
+	cmd = appendOptionalOption(cmd, "--sandbox", secretRmOptions.Sandbox)
 
-  if secretRmOptions.Sandbox != nil {
-    cmd = append(cmd, "--sandbox", *secretRmOptions.Sandbox)
-  }
+	_, err := execSbxCmd(&cmd)
 
-  _, err := execSbxCmd(&cmd)
-
-  return err
+	return err
 }
 
 func PolicyLs(policyLsOptions *PolicyLsOptions) ([]Policy, error) {
-  cmd := []string{"policy", "ls", "--json"}
+	cmd := []string{"policy", "ls", "--json"}
+	cmd = appendOptionalOption(cmd, "--decision", policyLsOptions.Decision)
+	cmd = appendOptionalBoolFlag(cmd, "--include-inactive", policyLsOptions.IncludeInactive)
+	cmd = appendOptionalOption(cmd, "--type", policyLsOptions.Type)
 
-  if policyLsOptions.Decision != nil {
-    cmd = append(cmd, "--decision", *policyLsOptions.Decision)
-  }
+	rawResult, err := execSbxCmd(&cmd)
 
-  if policyLsOptions.IncludeInactive != nil && *policyLsOptions.IncludeInactive {
-    cmd = append(cmd, "--include-inactive")
-  }
+	if err != nil {
+		return nil, err
+	}
 
-  if policyLsOptions.Type != nil {
-    cmd = append(cmd, "--type", *policyLsOptions.Type)
-  }
+	var result policyLsResult
 
-  rawResult, err := execSbxCmd(&cmd)
+	err = json.Unmarshal(rawResult, &result)
 
-  if err != nil {
-    return nil, err
-  }
+	if err != nil {
+		return nil, err
+	}
 
-  var result policyLsResult
-
-  err = json.Unmarshal(rawResult, &result)
-
-  if err != nil {
-    return nil, err
-  }
-
-  return result.Rules, nil
+	return result.Rules, nil
 }
 
-func PolicyAllowNetwork() {}
+func PolicyAllowNetwork(policyAllowDenyNetworkOptions *PolicyAllowDenyNetworkOptions) error {
+	cmd := []string{"policy", "allow", "network"}
+	cmd = appendOptionalOption(cmd, "--sandbox", policyAllowDenyNetworkOptions.Sandbox)
+	cmd = append(cmd, policyAllowDenyNetworkOptions.Resources...)
+
+	_, err := execSbxCmd(&cmd)
+
+	return err
+}
+
 func PolicyCheckNetwork() {}
-func PolicyDenyNetwork()  {}
-func PolicyRmNetwork()    {}
+
+func PolicyDenyNetwork(policyAllowDenyNetworkOptions *PolicyAllowDenyNetworkOptions) error {
+	cmd := []string{"policy", "deny", "network"}
+	cmd = appendOptionalOption(cmd, "--sandbox", policyAllowDenyNetworkOptions.Sandbox)
+	cmd = append(cmd, policyAllowDenyNetworkOptions.Resources...)
+
+	_, err := execSbxCmd(&cmd)
+
+	return err
+}
+func PolicyRmNetwork() {}
+
+// ==== HELPERS ==== //
+
+func appendOptionalBoolFlag(cmd []string, flag string, value *bool) []string {
+	if value != nil && *value {
+		return append(cmd, flag)
+	}
+
+	return cmd
+}
+
+func appendOptionalOption(cmd []string, option string, value *string) []string {
+	if value != nil {
+		return append(cmd, option, *value)
+	}
+
+	return cmd
+}
 
 func execSbxCmd(cmd *[]string) ([]byte, error) {
-  _cmd := exec.Command("sbx", *cmd...)
-  _cmd.Stderr = os.Stderr
-  result, err := _cmd.Output()
+	_cmd := exec.Command("sbx", *cmd...)
+	_cmd.Stderr = os.Stderr
+	result, err := _cmd.Output()
 
-  if err != nil {
-    return nil, err
-  }
+	if err != nil {
+		return nil, err
+	}
 
-  return result, nil
+	return result, nil
 }
