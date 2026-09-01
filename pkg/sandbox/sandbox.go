@@ -102,6 +102,31 @@ type PolicyAllowDenyNetworkOptions struct {
 	Sandbox   *string
 }
 
+type PolicyCheckNetworkOptions struct {
+	Target  string  `json:"target"`
+	Sandbox *string `json:"sandbox"`
+}
+
+type PolicyCheckNetworkResult struct {
+	// net:connect:tcp
+	Action  string `json:"action"`
+	Allowed bool   `json:"allowed"`
+	// global | sandbox:<sandbox-name>
+	Context string `json:"context"`
+	// implicit
+	DenyKind   *string `json:"deny_kind"`
+	Governance struct {
+		Active bool `json:"active"`
+	} `json:"governance"`
+	Reason *string `json:"reason"`
+	// net:domain
+	ResourceType  string `json:"resource_type"`
+	ResourceValue string `json:"resource_value"`
+	Target        string `json:"target"`
+	// network | filesystem
+	Type string `json:"type"`
+}
+
 func Ls() ([]Sandbox, error) {
 	cmd := []string{"ls", "--json"}
 
@@ -267,7 +292,25 @@ func PolicyAllowNetwork(policyAllowDenyNetworkOptions *PolicyAllowDenyNetworkOpt
 	return err
 }
 
-func PolicyCheckNetwork() {}
+func PolicyCheckNetwork(policyCheckNetworkOptions *PolicyCheckNetworkOptions) (*PolicyCheckNetworkResult, error) {
+	cmd := []string{"policy", "check", "network"}
+	cmd = appendOptionalOption(cmd, "--sandbox", policyCheckNetworkOptions.Sandbox)
+	cmd = append(cmd, policyCheckNetworkOptions.Target, "--json", "--verbose")
+
+	// ignoring err here, because when check results in "deny", sbx exists with error code 1
+	rawResult, _ := execSbxCmd(&cmd)
+
+	var result PolicyCheckNetworkResult
+
+	err := json.Unmarshal(rawResult, &result)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+
+}
 
 func PolicyDenyNetwork(policyAllowDenyNetworkOptions *PolicyAllowDenyNetworkOptions) error {
 	cmd := []string{"policy", "deny", "network"}
@@ -278,7 +321,10 @@ func PolicyDenyNetwork(policyAllowDenyNetworkOptions *PolicyAllowDenyNetworkOpti
 
 	return err
 }
-func PolicyRmNetwork() {}
+
+func PolicyRmNetwork() {
+
+}
 
 // ==== HELPERS ==== //
 
@@ -304,7 +350,7 @@ func execSbxCmd(cmd *[]string) ([]byte, error) {
 	result, err := _cmd.Output()
 
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 
 	return result, nil
