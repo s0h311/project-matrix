@@ -103,8 +103,8 @@ type PolicyAllowDenyNetworkOptions struct {
 }
 
 type PolicyCheckNetworkOptions struct {
-	Target  string  `json:"target"`
-	Sandbox *string `json:"sandbox"`
+	Target  string
+	Sandbox *string
 }
 
 type PolicyCheckNetworkResult struct {
@@ -125,6 +125,12 @@ type PolicyCheckNetworkResult struct {
 	Target        string `json:"target"`
 	// network | filesystem
 	Type string `json:"type"`
+}
+
+type PolicyRmNetworkOptions struct {
+	Id        *string
+	Resources *[]string
+	Sandbox   *string
 }
 
 func Ls() ([]Sandbox, error) {
@@ -285,7 +291,7 @@ func PolicyLs(policyLsOptions *PolicyLsOptions) ([]Policy, error) {
 func PolicyAllowNetwork(policyAllowDenyNetworkOptions *PolicyAllowDenyNetworkOptions) error {
 	cmd := []string{"policy", "allow", "network"}
 	cmd = appendOptionalOption(cmd, "--sandbox", policyAllowDenyNetworkOptions.Sandbox)
-	cmd = append(cmd, policyAllowDenyNetworkOptions.Resources...)
+	cmd = append(cmd, strings.Join(policyAllowDenyNetworkOptions.Resources, ","))
 
 	_, err := execSbxCmd(&cmd)
 
@@ -315,15 +321,25 @@ func PolicyCheckNetwork(policyCheckNetworkOptions *PolicyCheckNetworkOptions) (*
 func PolicyDenyNetwork(policyAllowDenyNetworkOptions *PolicyAllowDenyNetworkOptions) error {
 	cmd := []string{"policy", "deny", "network"}
 	cmd = appendOptionalOption(cmd, "--sandbox", policyAllowDenyNetworkOptions.Sandbox)
-	cmd = append(cmd, policyAllowDenyNetworkOptions.Resources...)
+	cmd = append(cmd, strings.Join(policyAllowDenyNetworkOptions.Resources, ","))
 
 	_, err := execSbxCmd(&cmd)
 
 	return err
 }
 
-func PolicyRmNetwork() {
+func PolicyRmNetwork(policyRmNetworkOptions *PolicyRmNetworkOptions) error {
+	cmd := []string{"policy", "rm", "network"}
+	cmd = appendOptionalOption(cmd, "--sandbox", policyRmNetworkOptions.Sandbox)
+	cmd = appendOptionalOption(cmd, "--id", policyRmNetworkOptions.Id)
 
+	if policyRmNetworkOptions.Resources != nil && len(*policyRmNetworkOptions.Resources) > 0 {
+		cmd = append(cmd, "--resource", strings.Join(*policyRmNetworkOptions.Resources, ","))
+	}
+
+	_, err := execSbxCmd(&cmd)
+
+	return err
 }
 
 // ==== HELPERS ==== //
